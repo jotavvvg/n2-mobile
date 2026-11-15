@@ -105,6 +105,72 @@ app.get('/api/estabelecimentos/:id/produtos', async (req, res) => {
   }
 });
 
+app.get('/api/pedidos', async (req, res) => {
+  const { usuario_id: usuarioId } = req.query;
+
+  if (!isPositiveInteger(usuarioId)) {
+    return res.status(400).json({ erro: 'Identificador de usuário inválido.' });
+  }
+
+  try {
+    const [rows] = await pool.execute(
+      `SELECT
+        p.id,
+        p.endereco_entrega,
+        p.valor_total,
+        p.status,
+        p.criado_em,
+        e.id AS estabelecimento_id,
+        e.nome AS estabelecimento_nome,
+        ip.produto_id,
+        ip.quantidade,
+        ip.preco_unitario,
+        pr.nome AS produto_nome
+      FROM pedidos p
+      INNER JOIN estabelecimentos e ON e.id = p.estabelecimento_id
+      LEFT JOIN itens_pedido ip ON ip.pedido_id = p.id
+      LEFT JOIN produtos pr ON pr.id = ip.produto_id
+      WHERE p.usuario_id = ?
+      ORDER BY p.criado_em DESC, p.id DESC, ip.id ASC`,
+      [Number(usuarioId)],
+    );
+
+    const pedidos = [];
+    const pedidosPorId = new Map();
+    for (const row of rows) {
+      let pedido = pedidosPorId.get(row.id);
+      if (!pedido) {
+        pedido = {
+          id: row.id,
+          endereco_entrega: row.endereco_entrega,
+          valor_total: row.valor_total,
+          status: row.status,
+          criado_em: row.criado_em,
+          estabelecimento_id: row.estabelecimento_id,
+          estabelecimento_nome: row.estabelecimento_nome,
+          itens: [],
+        };
+        pedidosPorId.set(row.id, pedido);
+        pedidos.push(pedido);
+      }
+
+      if (row.produto_id !== null) {
+        pedido.itens.push({
+          produto_id: row.produto_id,
+          produto_nome: row.produto_nome,
+          quantidade: row.quantidade,
+          preco_unitario: row.preco_unitario,
+        });
+      }
+    }
+
+    return res.status(200).json(pedidos);
+  } catch (error) {
+    console.error('Erro ao listar pedidos do usuário:', error);
+    return res.status(500).json({ erro: 'Não foi possível carregar seus pedidos.' });
+  }
+});
+
 app.post('/api/pedidos', async (req, res) => {
   const {
     usuario_id: usuarioId,

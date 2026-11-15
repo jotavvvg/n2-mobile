@@ -1,25 +1,51 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import ScreenContainer from '../components/ScreenContainer';
+import { StyleSheet, Text, View } from 'react-native';
+import { Fish, Pizza, Sparkles, Utensils } from 'lucide-react-native';
+import ResponsiveLayout from '../components/ResponsiveLayout';
+import AppButton from '../components/AppButton';
+import AppInput from '../components/AppInput';
+import FeedbackBanner from '../components/FeedbackBanner';
+import useResponsive from '../hooks/useResponsive';
 import { request } from '../config/api';
+import { validateLogin } from '../utils/validation';
+import { useSession } from '../auth/SessionContext';
+import { colors, radii, shadows, spacing, typography } from '../theme/tokens';
+
+function BrandingPanel() {
+  return (
+    <View style={styles.branding}>
+      <Text style={styles.brand}>delivery<Text style={styles.brandingAccent}>ads</Text></Text>
+      <Text style={styles.heroTitle}>Sua comida favorita, do banco de dados direto para sua mesa.</Text>
+      <Text style={styles.heroText}>Descubra restaurantes, monte sua sacola e acompanhe seu pedido com praticidade.</Text>
+      <View style={styles.badges}>
+        <Utensils color={colors.surface} size={26} strokeWidth={2} />
+        <Pizza color={colors.surface} size={26} strokeWidth={2} />
+        <Fish color={colors.surface} size={26} strokeWidth={2} />
+        <Sparkles color={colors.surface} size={26} strokeWidth={2} />
+      </View>
+    </View>
+  );
+}
 
 export default function LoginScreen({ navigation, route }) {
+  const { isDesktop } = useResponsive();
+  const { hydrated, signIn, usuario: sessionUser } = useSession();
   const [email, setEmail] = useState(route.params?.emailCadastrado || '');
   const [senha, setSenha] = useState('');
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
 
+  useEffect(() => setEmail(route.params?.emailCadastrado || ''), [route.params?.emailCadastrado]);
   useEffect(() => {
-    setEmail(route.params?.emailCadastrado || '');
-  }, [route.params?.emailCadastrado]);
+    if (hydrated && sessionUser && !route.params?.emailCadastrado) {
+      navigation.replace('Home', { usuario: sessionUser });
+    }
+  }, [hydrated, navigation, route.params?.emailCadastrado, sessionUser]);
 
   async function entrar() {
-    setErro('');
-    if (!email.trim() || !senha) {
-      setErro('Informe seu e-mail e senha.');
-      return;
-    }
-
+    const validationError = validateLogin({ email, senha });
+    setErro(validationError);
+    if (validationError) return;
     setLoading(true);
     try {
       const data = await request('/usuarios/login', {
@@ -27,82 +53,45 @@ export default function LoginScreen({ navigation, route }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim(), senha }),
       });
+      await signIn(data.usuario);
       navigation.replace('Home', { usuario: data.usuario });
     } catch (error) {
       setErro(error.message);
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }
 
   return (
-    <ScreenContainer>
-      <View style={styles.content}>
-        <Text style={styles.brand}>Delivery ADS</Text>
-        <Text style={styles.title}>Bem-vindo!</Text>
-        <Text style={styles.subtitle}>Entre para descobrir o que pedir hoje.</Text>
-        <TextInput
-          accessibilityLabel="E-mail"
-          style={styles.input}
-          placeholder="E-mail"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoComplete="email"
-          editable={!loading}
-        />
-        <TextInput
-          accessibilityLabel="Senha"
-          style={styles.input}
-          placeholder="Senha"
-          value={senha}
-          onChangeText={setSenha}
-          secureTextEntry
-          editable={!loading}
-        />
-        {erro ? <Text accessibilityRole="alert" style={styles.error}>{erro}</Text> : null}
-        <TouchableOpacity style={styles.button} onPress={entrar} disabled={loading}>
-          {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.buttonText}>Entrar</Text>}
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.linkButton} onPress={() => navigation.navigate('Cadastro')}>
-          <Text style={styles.link}>Criar nova conta (Cadastre-se)</Text>
-        </TouchableOpacity>
+    <ResponsiveLayout navigation={navigation}>
+      <View style={[styles.authCard, isDesktop && styles.authDesktop]}>
+        {isDesktop ? <BrandingPanel /> : <Text style={styles.mobileBrand}>delivery<Text style={styles.brandAccent}>ads</Text></Text>}
+        <View style={styles.form}>
+          <Text style={styles.title}>Bem-vindo!</Text>
+          <Text style={styles.subtitle}>Entre para descobrir o que pedir hoje.</Text>
+          {route.params?.emailCadastrado ? <FeedbackBanner message="Conta criada! Digite sua senha para entrar." variant="success" /> : null}
+          <FeedbackBanner message={erro} variant="error" />
+          <AppInput label="E-mail" value={email} onChangeText={setEmail} placeholder="seu@email.com" keyboardType="email-address" autoComplete="email" editable={!loading} />
+          <AppInput label="Senha" value={senha} onChangeText={setSenha} placeholder="Sua senha" secureTextEntry editable={!loading} />
+          <AppButton title="Entrar" onPress={entrar} loading={loading} style={styles.submit} />
+          <AppButton title="Criar nova conta (Cadastre-se)" variant="ghost" onPress={() => navigation.navigate('Cadastro')} />
+        </View>
       </View>
-    </ScreenContainer>
+    </ResponsiveLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  content: {
-    alignSelf: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#ECEDEF',
-    borderRadius: 18,
-    borderWidth: 1,
-    flexGrow: 1,
-    justifyContent: 'center',
-    marginVertical: 8,
-    maxWidth: 480,
-    padding: 28,
-    width: '100%',
-  },
-  brand: { color: '#E63946', fontSize: 16, fontWeight: '700', marginBottom: 12, textTransform: 'uppercase' },
-  title: { color: '#202124', fontSize: 30, fontWeight: '700', marginBottom: 8 },
-  subtitle: { color: '#60656B', fontSize: 15, marginBottom: 24 },
-  input: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#DDE1E5',
-    borderRadius: 10,
-    borderWidth: 1,
-    fontSize: 16,
-    marginBottom: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-  },
-  button: { alignItems: 'center', backgroundColor: '#E63946', borderRadius: 10, marginTop: 8, padding: 15 },
-  buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
-  linkButton: { alignItems: 'center', padding: 16 },
-  link: { color: '#C92A35', fontSize: 14, fontWeight: '600' },
-  error: { color: '#B42318', marginBottom: 12 },
+  authCard: { alignSelf: 'center', backgroundColor: colors.surface, borderRadius: radii.lg, flex: 1, maxWidth: 1050, overflow: 'hidden', width: '100%' },
+  authDesktop: { flexDirection: 'row', marginVertical: spacing.lg, minHeight: 560, ...shadows.card },
+  branding: { backgroundColor: colors.primary, flex: 1, justifyContent: 'center', padding: spacing.xxl },
+  brand: { color: colors.surface, fontSize: 22, fontWeight: '800', marginBottom: spacing.xxl },
+  brandAccent: { color: colors.primary },
+  brandingAccent: { color: colors.surface },
+  heroTitle: { color: colors.surface, fontSize: 32, fontWeight: '800', lineHeight: 39 },
+  heroText: { color: '#FEE2E2', fontSize: 16, lineHeight: 24, marginTop: spacing.lg },
+  badges: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xxl },
+  mobileBrand: { color: colors.primary, fontSize: 22, fontWeight: '800', padding: spacing.lg },
+  form: { flex: 1, justifyContent: 'center', padding: spacing.xxl },
+  title: { ...typography.h1, marginBottom: spacing.sm },
+  subtitle: { ...typography.body, marginBottom: spacing.lg },
+  submit: { marginTop: spacing.sm, width: '100%' },
 });

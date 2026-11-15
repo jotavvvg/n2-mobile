@@ -1,9 +1,16 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import ScreenContainer from '../components/ScreenContainer';
+import { StyleSheet, Text, View } from 'react-native';
+import ResponsiveLayout from '../components/ResponsiveLayout';
+import AppButton from '../components/AppButton';
+import AppInput from '../components/AppInput';
+import FeedbackBanner from '../components/FeedbackBanner';
+import useResponsive from '../hooks/useResponsive';
 import { request } from '../config/api';
+import { validateRegistration } from '../utils/validation';
+import { colors, radii, spacing, typography } from '../theme/tokens';
 
 export default function CadastroScreen({ navigation }) {
+  const { isDesktop } = useResponsive();
   const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
@@ -13,19 +20,14 @@ export default function CadastroScreen({ navigation }) {
 
   useEffect(() => {
     if (!sucesso) return undefined;
-    const timer = setTimeout(() => {
-      navigation.navigate('Login', { emailCadastrado: email.trim() });
-    }, 800);
+    const timer = setTimeout(() => navigation.navigate('Login', { emailCadastrado: email.trim() }), 800);
     return () => clearTimeout(timer);
   }, [email, navigation, sucesso]);
 
   async function cadastrar() {
-    setErro('');
-    if (!nome.trim() || !email.trim() || !senha.trim()) {
-      setErro('Preencha seu nome, e-mail e senha.');
-      return;
-    }
-
+    const validationError = validateRegistration({ nome, email, senha });
+    setErro(validationError);
+    if (validationError) return;
     setLoading(true);
     try {
       await request('/usuarios/cadastro', {
@@ -34,88 +36,46 @@ export default function CadastroScreen({ navigation }) {
         body: JSON.stringify({ nome: nome.trim(), email: email.trim(), senha }),
       });
       setSucesso(true);
-    } catch (error) {
-      setErro(error.message);
-    } finally {
-      setLoading(false);
-    }
+    } catch (error) { setErro(error.message); } finally { setLoading(false); }
   }
 
   return (
-    <ScreenContainer>
-      <View style={styles.content}>
-        <Text style={styles.title}>Crie sua conta</Text>
-        <Text style={styles.subtitle}>Cadastre-se para pedir suas refeições favoritas.</Text>
-        <TextInput
-          accessibilityLabel="Nome completo"
-          style={styles.input}
-          placeholder="Nome completo"
-          value={nome}
-          onChangeText={setNome}
-          autoCapitalize="words"
-          editable={!loading && !sucesso}
-        />
-        <TextInput
-          accessibilityLabel="E-mail"
-          style={styles.input}
-          placeholder="E-mail"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoComplete="email"
-          editable={!loading && !sucesso}
-        />
-        <TextInput
-          accessibilityLabel="Senha"
-          style={styles.input}
-          placeholder="Senha"
-          value={senha}
-          onChangeText={setSenha}
-          secureTextEntry
-          editable={!loading && !sucesso}
-        />
-        {erro ? <Text accessibilityRole="alert" style={styles.error}>{erro}</Text> : null}
-        {sucesso ? (
-          <Text style={styles.success}>Cadastro realizado com sucesso! Redirecionando...</Text>
-        ) : (
-          <TouchableOpacity style={styles.button} onPress={cadastrar} disabled={loading}>
-            {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.buttonText}>Cadastrar</Text>}
-          </TouchableOpacity>
-        )}
+    <ResponsiveLayout navigation={navigation} onBack={() => navigation.navigate('Login')}>
+      <View style={[styles.authCard, isDesktop && styles.authDesktop]}>
+        {isDesktop ? (
+          <View style={styles.branding}>
+            <Text style={styles.brand}>delivery<Text style={styles.brandingAccent}>ads</Text></Text>
+            <Text style={styles.heroTitle}>Um novo jeito de pedir suas refeições favoritas.</Text>
+            <Text style={styles.heroText}>Crie sua conta e tenha tudo pronto para o próximo pedido.</Text>
+          </View>
+        ) : <Text style={styles.mobileBrand}>delivery<Text style={styles.brandAccent}>ads</Text></Text>}
+        <View style={styles.form}>
+          <Text style={styles.title}>Crie sua conta</Text>
+          <Text style={styles.subtitle}>Cadastre-se para pedir suas refeições favoritas.</Text>
+          <FeedbackBanner message={erro} variant="error" />
+          <FeedbackBanner message={sucesso ? 'Cadastro realizado com sucesso! Redirecionando...' : ''} variant="success" />
+          <AppInput label="Nome completo" value={nome} onChangeText={setNome} placeholder="Seu nome" editable={!loading && !sucesso} />
+          <AppInput label="E-mail" value={email} onChangeText={setEmail} placeholder="seu@email.com" keyboardType="email-address" editable={!loading && !sucesso} />
+          <AppInput label="Senha" value={senha} onChangeText={setSenha} placeholder="Crie uma senha" secureTextEntry editable={!loading && !sucesso} />
+          {!sucesso ? <AppButton title="Cadastrar" onPress={cadastrar} loading={loading} style={styles.submit} /> : null}
+        </View>
       </View>
-    </ScreenContainer>
+    </ResponsiveLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  content: {
-    alignSelf: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#ECEDEF',
-    borderRadius: 18,
-    borderWidth: 1,
-    flexGrow: 1,
-    justifyContent: 'center',
-    marginVertical: 8,
-    maxWidth: 480,
-    padding: 28,
-    width: '100%',
-  },
-  title: { color: '#202124', fontSize: 28, fontWeight: '700', marginBottom: 8 },
-  subtitle: { color: '#60656B', fontSize: 15, marginBottom: 24 },
-  input: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#DDE1E5',
-    borderRadius: 10,
-    borderWidth: 1,
-    fontSize: 16,
-    marginBottom: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 13,
-  },
-  button: { alignItems: 'center', backgroundColor: '#E63946', borderRadius: 10, marginTop: 8, padding: 15 },
-  buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
-  error: { color: '#B42318', marginBottom: 12 },
-  success: { color: '#16803C', fontWeight: '600', marginTop: 8 },
+  authCard: { alignSelf: 'center', backgroundColor: colors.surface, borderRadius: radii.lg, flex: 1, maxWidth: 1050, overflow: 'hidden', width: '100%' },
+  authDesktop: { flexDirection: 'row', marginVertical: spacing.lg, minHeight: 560 },
+  branding: { backgroundColor: colors.primary, flex: 1, justifyContent: 'center', padding: spacing.xxl },
+  brand: { color: colors.surface, fontSize: 22, fontWeight: '800', marginBottom: spacing.xxl },
+  brandAccent: { color: colors.primary },
+  brandingAccent: { color: colors.surface },
+  heroTitle: { color: colors.surface, fontSize: 30, fontWeight: '800', lineHeight: 38 },
+  heroText: { color: '#FEE2E2', fontSize: 16, lineHeight: 24, marginTop: spacing.lg },
+  mobileBrand: { color: colors.primary, fontSize: 22, fontWeight: '800', padding: spacing.lg },
+  form: { flex: 1, justifyContent: 'center', padding: spacing.xxl },
+  title: { ...typography.h1, marginBottom: spacing.sm },
+  subtitle: { ...typography.body, marginBottom: spacing.lg },
+  submit: { marginTop: spacing.sm },
 });

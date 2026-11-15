@@ -33,6 +33,7 @@ export const linking = {
         parse: { estabelecimentoId: Number },
       },
       Pedido: 'pedido',
+      Pedidos: 'pedidos',
     },
   },
   getPathFromState(state, options) {

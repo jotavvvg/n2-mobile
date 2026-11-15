@@ -1,206 +1,139 @@
 import { useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
-} from 'react-native';
-import ScreenContainer from '../components/ScreenContainer';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { CheckCircle2 } from 'lucide-react-native';
+import ResponsiveLayout from '../components/ResponsiveLayout';
+import AppButton from '../components/AppButton';
+import AppInput from '../components/AppInput';
+import FeedbackBanner from '../components/FeedbackBanner';
+import useResponsive from '../hooks/useResponsive';
 import { request } from '../config/api';
+import { validateAddress } from '../utils/validation';
+import { useSession } from '../auth/SessionContext';
+import { colors, radii, spacing, typography } from '../theme/tokens';
 
 function formatCurrency(value) {
   return Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
 export default function PedidoScreen({ navigation, route }) {
-  const routeParams = route.params || {};
-  const { usuario, estabelecimento } = routeParams;
-  const itensSelecionados = routeParams.itensSelecionados || [];
-  const { width } = useWindowDimensions();
+  const params = route.params || {};
+  const { usuario: sessionUser } = useSession();
+  const usuario = params.usuario || sessionUser;
+  const { estabelecimento } = params;
+  const itensSelecionados = params.itensSelecionados || [];
+  const { isDesktop } = useResponsive();
   const [enderecoEntrega, setEnderecoEntrega] = useState('');
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState('');
   const [pedidoId, setPedidoId] = useState(null);
-
-  const subtotal = useMemo(
-    () => itensSelecionados.reduce((total, item) => total + item.preco_unitario * item.quantidade, 0),
-    [itensSelecionados],
-  );
-  const valorTotal = subtotal + Number(estabelecimento?.taxa_entrega || 0);
+  const subtotal = useMemo(() => itensSelecionados.reduce((total, item) => total + item.preco_unitario * item.quantidade, 0), [itensSelecionados]);
+  const taxa = Number(estabelecimento?.taxa_entrega || 0);
+  const valorTotal = subtotal + taxa;
 
   async function finalizarPedido() {
-    setErro('');
-    if (!enderecoEntrega.trim()) {
-      setErro('Informe o endereço de entrega.');
+    const validationError = validateAddress(enderecoEntrega);
+    setErro(validationError);
+    if (validationError) return;
+    if (!Number.isInteger(Number(usuario.id)) || !Number.isInteger(Number(estabelecimento.id)) || itensSelecionados.some((item) => (
+      !Number.isInteger(Number(item.produto_id)) ||
+      !Number.isInteger(Number(item.quantidade)) ||
+      Number(item.quantidade) < 1 ||
+      !Number.isFinite(Number(item.preco_unitario))
+    ))) {
+      setErro('Não foi possível validar os itens do pedido. Volte ao cardápio e tente novamente.');
       return;
     }
-
     setLoading(true);
     try {
       const resposta = await request('/pedidos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          usuario_id: usuario.id,
-          estabelecimento_id: estabelecimento.id,
-          endereco_entrega: enderecoEntrega.trim(),
-          valor_total: valorTotal,
-          itens: itensSelecionados,
-        }),
+        body: JSON.stringify({ usuario_id: usuario.id, estabelecimento_id: estabelecimento.id, endereco_entrega: enderecoEntrega.trim(), valor_total: valorTotal, itens: itensSelecionados }),
       });
       setPedidoId(resposta.pedido_id);
-    } catch (error) {
-      setErro(error.message);
-    } finally {
-      setLoading(false);
-    }
+    } catch (error) { setErro(error.message); } finally { setLoading(false); }
   }
 
-  if (pedidoId !== null) {
-    return (
-      <ScreenContainer>
-        <View style={styles.confirmation}>
-          <Text style={styles.confirmationIcon}>✓</Text>
-          <Text style={styles.confirmationTitle}>Pedido confirmado!</Text>
-          <Text style={styles.confirmationText}>Seu pedido #{pedidoId} foi registrado com sucesso.</Text>
-          <TouchableOpacity
-            style={styles.button}
-            onPress={() => navigation.navigate('Home', { usuario, ultimoPedidoId: pedidoId })}
-          >
-            <Text style={styles.buttonText}>Voltar ao início</Text>
-          </TouchableOpacity>
-        </View>
-      </ScreenContainer>
-    );
-  }
+  if (pedidoId !== null) return (
+    <ResponsiveLayout navigation={navigation} usuario={usuario}>
+      <View style={styles.confirmation}>
+        <View style={styles.check}><CheckCircle2 color={colors.success} size={46} strokeWidth={2} /></View>
+        <Text style={styles.confirmationTitle}>Pedido confirmado!</Text>
+        <Text style={styles.confirmationText}>Pedido #{pedidoId} registrado para entrega em {enderecoEntrega}.</Text>
+        <AppButton title="Acompanhar / Voltar ao início" onPress={() => navigation.navigate('Home', { usuario, ultimoPedidoId: pedidoId })} style={styles.confirmButton} />
+      </View>
+    </ResponsiveLayout>
+  );
 
-  if (!usuario || !estabelecimento || itensSelecionados.length === 0) {
-    return (
-      <ScreenContainer>
-        <View style={styles.missingOrder}>
-          <Text style={styles.heading}>Pedido não encontrado</Text>
-          <Text style={styles.confirmationText}>
-            Este endereço não contém os dados do carrinho. Volte ao cardápio para montar seu pedido.
-          </Text>
-          <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('Login')}>
-            <Text style={styles.buttonText}>Ir para o início</Text>
-          </TouchableOpacity>
-        </View>
-      </ScreenContainer>
-    );
-  }
-
-  const desktop = width >= 900;
+  if (!usuario || !estabelecimento || !itensSelecionados.length) return (
+    <ResponsiveLayout navigation={navigation}>
+      <View style={styles.confirmation}><Text style={styles.confirmationTitle}>Pedido não encontrado</Text><Text style={styles.confirmationText}>Volte ao cardápio para montar seu pedido.</Text><AppButton title="Ir para o início" onPress={() => navigation.navigate('Home')} /></View>
+    </ResponsiveLayout>
+  );
 
   return (
-    <ScreenContainer>
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        <View style={styles.orderContent}>
-          <Text style={styles.eyebrow}>FINALIZAÇÃO</Text>
-          <Text style={styles.heading}>Revise seu pedido</Text>
-          <Text style={styles.establishment}>{estabelecimento.nome}</Text>
-          <View style={[styles.checkoutLayout, desktop && styles.checkoutLayoutDesktop]}>
-            <View style={[styles.panel, desktop && styles.panelDesktop]}>
-              <Text style={styles.panelTitle}>Seu pedido</Text>
-              <View style={styles.items}>
-                {itensSelecionados.map((item) => (
-                  <View key={item.produto_id} style={styles.itemRow}>
-                    <View style={styles.itemDescription}>
-                      <Text style={styles.itemName}>{item.quantidade}x {item.nome}</Text>
-                      <Text style={styles.itemUnit}>{formatCurrency(item.preco_unitario)} cada</Text>
-                    </View>
-                    <Text style={styles.itemSubtotal}>
-                      {formatCurrency(item.preco_unitario * item.quantidade)}
-                    </Text>
-                  </View>
-                ))}
-              </View>
-              <View style={styles.totalRow}>
-                <Text style={styles.totalLabel}>Subtotal</Text>
-                <Text style={styles.totalValue}>{formatCurrency(subtotal)}</Text>
-              </View>
-              <View style={styles.totalRow}>
-                <Text style={styles.totalLabel}>Taxa de entrega</Text>
-                <Text style={styles.totalValue}>{formatCurrency(estabelecimento.taxa_entrega)}</Text>
-              </View>
-              <View style={[styles.totalRow, styles.grandTotal]}>
-                <Text style={styles.grandTotalLabel}>Total</Text>
-                <Text style={styles.grandTotalValue}>{formatCurrency(valorTotal)}</Text>
-              </View>
-            </View>
-
-            <View style={[styles.panel, desktop && styles.panelDesktop]}>
+    <ResponsiveLayout navigation={navigation} usuario={usuario} onBack={() => navigation.goBack()}>
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <Text style={styles.eyebrow}>FINALIZAÇÃO</Text>
+        <Text style={styles.title}>Revise seu pedido</Text>
+        <Text style={styles.establishment}>{estabelecimento.nome}</Text>
+        <View style={[styles.layout, isDesktop && styles.desktopLayout]}>
+          <View style={styles.left}>
+            <View style={styles.panel}>
               <Text style={styles.panelTitle}>Onde entregar?</Text>
-              <Text style={styles.addressLabel}>Endereço de entrega</Text>
-              <TextInput
-                accessibilityLabel="Endereço de entrega"
-                style={styles.addressInput}
-                placeholder="Rua, número, complemento e bairro"
-                value={enderecoEntrega}
-                onChangeText={setEnderecoEntrega}
-                multiline
-                textAlignVertical="top"
-                editable={!loading}
-              />
-              {erro ? <Text accessibilityRole="alert" style={styles.error}>{erro}</Text> : null}
-              <TouchableOpacity style={styles.button} onPress={finalizarPedido} disabled={loading}>
-                {loading ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.buttonText}>Finalizar pedido · {formatCurrency(valorTotal)}</Text>
-                )}
-              </TouchableOpacity>
+              <AppInput label="Endereço de entrega" value={enderecoEntrega} onChangeText={setEnderecoEntrega} placeholder="Rua, número, complemento e bairro" error={erro} editable={!loading} multiline />
             </View>
+            <View style={styles.panel}>
+              <Text style={styles.panelTitle}>Revisão dos itens</Text>
+              {itensSelecionados.map((item) => (
+                <View key={item.produto_id} style={styles.itemRow}>
+                  <View style={styles.quantityBadge}><Text style={styles.quantityBadgeText}>{item.quantidade}x</Text></View>
+                  <View style={styles.itemDescription}><Text style={styles.itemName}>{item.nome}</Text><Text style={styles.caption}>{formatCurrency(item.preco_unitario)} cada</Text></View>
+                  <Text style={styles.itemPrice}>{formatCurrency(item.preco_unitario * item.quantidade)}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+          <View style={[styles.panel, styles.summary]}>
+            <Text style={styles.panelTitle}>Resumo do pagamento</Text>
+            <View style={styles.line}><Text style={styles.caption}>Subtotal dos itens</Text><Text>{formatCurrency(subtotal)}</Text></View>
+            <View style={styles.line}><Text style={styles.caption}>Taxa de entrega</Text><Text>{formatCurrency(taxa)}</Text></View>
+            <View style={[styles.line, styles.totalLine]}><Text style={styles.totalLabel}>Total a pagar</Text><Text style={styles.total}>{formatCurrency(valorTotal)}</Text></View>
+            <FeedbackBanner message={erro} variant="error" />
+            <AppButton title={`Finalizar pedido · ${formatCurrency(valorTotal)}`} onPress={finalizarPedido} loading={loading} style={styles.submit} />
           </View>
         </View>
       </ScrollView>
-    </ScreenContainer>
+    </ResponsiveLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollContent: { flexGrow: 1, paddingBottom: 12 },
-  orderContent: { alignSelf: 'center', maxWidth: 1050, width: '100%' },
-  eyebrow: { color: '#C92A35', fontSize: 12, fontWeight: '800', letterSpacing: 1.5 },
-  heading: { color: '#202124', fontSize: 26, fontWeight: '800', marginTop: 6 },
-  establishment: { color: '#60656B', fontSize: 15, marginTop: 5 },
-  checkoutLayout: { marginTop: 22 },
-  checkoutLayoutDesktop: { flexDirection: 'row', alignItems: 'flex-start' },
-  panel: { backgroundColor: '#FFFFFF', borderColor: '#ECEDEF', borderRadius: 16, borderWidth: 1, marginBottom: 16, padding: 20 },
-  panelDesktop: { flex: 1, marginHorizontal: 8 },
-  panelTitle: { color: '#202124', fontSize: 18, fontWeight: '700', marginBottom: 12 },
-  items: { paddingHorizontal: 2 },
-  itemRow: { alignItems: 'center', borderBottomColor: '#ECEFF1', borderBottomWidth: 1, flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 13 },
-  itemDescription: { flex: 1, paddingRight: 10 },
-  itemName: { color: '#202124', fontSize: 14, fontWeight: '600' },
-  itemUnit: { color: '#777D83', fontSize: 12, marginTop: 4 },
-  itemSubtotal: { color: '#202124', fontSize: 14, fontWeight: '600' },
-  totalRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4, paddingTop: 12 },
-  totalLabel: { color: '#60656B', fontSize: 14 },
-  totalValue: { color: '#202124', fontSize: 14 },
-  grandTotal: { borderTopColor: '#DDE1E5', borderTopWidth: 1, marginTop: 12, paddingBottom: 4 },
-  grandTotalLabel: { color: '#202124', fontSize: 17, fontWeight: '700' },
-  grandTotalValue: { color: '#202124', fontSize: 17, fontWeight: '700' },
-  addressLabel: { color: '#202124', fontSize: 15, fontWeight: '700', marginBottom: 8, marginTop: 8 },
-  addressInput: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#DDE1E5',
-    borderRadius: 10,
-    borderWidth: 1,
-    fontSize: 15,
-    minHeight: 120,
-    padding: 13,
-  },
-  button: { alignItems: 'center', backgroundColor: '#E63946', borderRadius: 10, justifyContent: 'center', marginTop: 16, minHeight: 48, padding: 14 },
-  buttonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700', textAlign: 'center' },
-  error: { color: '#B42318', fontSize: 13, marginTop: 10 },
-  missingOrder: { alignItems: 'center', flex: 1, justifyContent: 'center', maxWidth: 520, alignSelf: 'center' },
-  confirmation: { alignItems: 'center', flex: 1, justifyContent: 'center' },
-  confirmationIcon: { alignItems: 'center', backgroundColor: '#E6F4EA', borderRadius: 36, color: '#16803C', fontSize: 35, height: 72, lineHeight: 72, overflow: 'hidden', textAlign: 'center', width: 72 },
-  confirmationTitle: { color: '#202124', fontSize: 25, fontWeight: '700', marginTop: 18 },
-  confirmationText: { color: '#60656B', fontSize: 15, lineHeight: 22, marginTop: 10, textAlign: 'center' },
+  scroll: { paddingBottom: spacing.xl },
+  eyebrow: { color: colors.primary, fontSize: 12, fontWeight: '800', letterSpacing: 1.5 },
+  title: { ...typography.h1, marginTop: spacing.sm },
+  establishment: { ...typography.body, marginTop: spacing.xs },
+  layout: { marginTop: spacing.lg },
+  desktopLayout: { flexDirection: 'row', gap: spacing.lg },
+  left: { flex: 1.2 },
+  panel: { backgroundColor: colors.surface, borderRadius: radii.lg, marginBottom: spacing.lg, padding: spacing.lg },
+  summary: { flex: 0.8 },
+  panelTitle: { ...typography.h3, marginBottom: spacing.md },
+  itemRow: { alignItems: 'center', backgroundColor: colors.background, borderColor: colors.border, borderRadius: radii.md, borderWidth: 1, flexDirection: 'row', marginBottom: spacing.sm, padding: spacing.md },
+  quantityBadge: { alignItems: 'center', backgroundColor: colors.primaryLight, borderRadius: radii.sm, height: 32, justifyContent: 'center', marginRight: spacing.sm, width: 40 },
+  quantityBadgeText: { color: colors.primary, fontSize: 12, fontWeight: '800' },
+  itemDescription: { flex: 1, marginRight: spacing.md },
+  itemName: { ...typography.bodyBold },
+  caption: { ...typography.caption },
+  itemPrice: { ...typography.bodyBold },
+  line: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: spacing.sm },
+  totalLine: { borderTopColor: colors.border, borderTopWidth: 1, marginTop: spacing.sm, paddingTop: spacing.md },
+  totalLabel: { ...typography.h2 },
+  total: { ...typography.price, fontSize: 20 },
+  submit: { marginTop: spacing.md },
+  confirmation: { alignItems: 'center', flex: 1, justifyContent: 'center', padding: spacing.xl },
+  check: { alignItems: 'center', backgroundColor: '#ECFDF5', borderRadius: 40, height: 80, justifyContent: 'center', width: 80 },
+  confirmationTitle: { ...typography.h1, marginTop: spacing.lg, textAlign: 'center' },
+  confirmationText: { ...typography.body, marginTop: spacing.sm, textAlign: 'center' },
+  confirmButton: { marginTop: spacing.lg },
 });
