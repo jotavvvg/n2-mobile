@@ -1,0 +1,11 @@
+{
+  "name": "delivery-ads",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently --kill-others --names backend,mobile \"npm run dev --prefix backend\" \"npm run start --prefix mobile\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
