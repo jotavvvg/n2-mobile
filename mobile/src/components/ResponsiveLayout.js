@@ -26,7 +26,7 @@ function TopNavbar({ navigation, usuario, onBack, onLogout, compact = false }) {
             <Text style={styles.addressCaption}>ENTREGANDO EM</Text>
             <View style={styles.addressValue}>
               <MapPin color={colors.primary} size={15} strokeWidth={2.2} />
-              <Text style={styles.addressText}>Campus ADS</Text>
+              <Text style={styles.addressText}>Águas Claras</Text>
             </View>
           </View>
         ) : null}

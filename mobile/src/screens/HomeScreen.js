@@ -53,7 +53,7 @@ export default function HomeScreen({ navigation, route }) {
       <View style={styles.heading}>
         <Text style={styles.eyebrow}>DESCUBRA</Text>
         <Text style={styles.title}>Olá, {usuario?.nome || 'encontre seu próximo pedido'}</Text>
-        <Text style={styles.subtitle}>Entregando em: Campus ADS / Minha Região</Text>
+        <Text style={styles.subtitle}>Entregando em: Águas Claras / Minha Região</Text>
       </View>
       {!usuario ? <FeedbackBanner message="Entre na sua conta para finalizar um pedido." variant="info" /> : null}
       {ultimoPedidoId ? <FeedbackBanner message={`Pedido #${ultimoPedidoId} confirmado e em preparo!`} variant="success" /> : null}
